@@ -2,6 +2,12 @@ from mp2d.scripts.utilities import *
 from mp2d.scripts.rrt_connect import RRTConnect
 import matplotlib.pyplot as plt
 import numpy as np
+from time import sleep
+from math import fabs
+from path_gen import *
+import torch
+from mp2d.scripts.manipulator import *
+from mp2d.scripts.planning import *
 
 try:
     from ompl import util as ou
@@ -17,17 +23,19 @@ except ImportError:
     from ompl import util as ou
     from ompl import base as ob
     from ompl import geometric as og
-from time import sleep
-from math import fabs
-from path_gen import *
-import torch
-from mp2d.scripts.manipulator import *
-from mp2d.scripts.planning import *
+
+links = [0.5, 0.5]
+dof = 2
+ma = manipulator(dof, links)
+pl = Planning(ma)
+planning_range_max = np.array([np.pi, np.pi])
+planning_range_min = np.array([-np.pi, -np.pi])
+pl_env = Planning(ma, planning_range_max, planning_range_min, resolution=0.05)
 
 
 class MyValidStateSampler(ob.ValidStateSampler):
 
-    def __init__(self, si):
+    def __init__(self, si, gmm_dist):
         super(MyValidStateSampler, self).__init__(si)
         self.name_ = "aaa"
         self.gmm = gmm_dist
@@ -54,28 +62,25 @@ class MyValidStateSampler(ob.ValidStateSampler):
         return self
 
 
-# This function is needed, even when we can write a sampler like the one
-# above, because we need to check path segments for validity
-
 def isStateValid(state):
     obstacles = pl_req.obstacles
     is_valid = pl_env.manipulator.check_validity(state, obstacles)
     return is_valid
 
 
-def plan():
+def plan(state, pl_req):
     # construct the state space we are planning in
     space = ob.RealVectorStateSpace(2)
-
     # set the bounds
     bounds = ob.RealVectorBounds(2)
     bounds.setLow(-4)
     bounds.setHigh(4)
     space.setBounds(bounds)
-
+    obstacles = pl_req.obstacles
+    is_valid = pl_env.manipulator.check_validity(state, obstacles)
+    isStateValid = is_valid
     # define a simple setup class
     ss = og.SimpleSetup(space)
-
     # set state validity checking for this space
     ss.setStateValidityChecker(ob.StateValidityCheckerFn(isStateValid))
 
@@ -109,7 +114,6 @@ def plan():
 
     ompl_solution = list(solution_path.getStates())
     solution = []
-    count = MyValidStateSampler.get_count()
 
     for state in ompl_solution:
         np_state = np.zeros(2)
@@ -123,12 +127,12 @@ def plan():
         print(ss.getSolutionPath())
         print(solution)
         _, ax = plt.subplots(1, 1)
-        ax.scatter(samples[:, 0], samples[:, 1], s=1)
-        px = [node[0] for node in mean]
-        py = [node[1] for node in mean]
-        ax.scatter(px, py, color="red", s=10)
-        ax.scatter(req.start[0], req.start[1], color="green", s=60)
-        ax.scatter(req.goal[0], req.goal[1], color="blue", s=60)
+        # ax.scatter(samples[:, 0], samples[:, 1], s=1)
+        # px = [node[0] for node in mean]
+        # py = [node[1] for node in mean]
+        # ax.scatter(px, py, color="red", s=10)
+        # ax.scatter(req.start[0], req.start[1], color="green", s=60)
+        # ax.scatter(req.goal[0], req.goal[1], color="blue", s=60)
         obstacles_space = pl.get_obstacle_space(req)
         obst_space_x = [ns[0] for ns in obstacles_space]
         obst_space_y = [ns[1] for ns in obstacles_space]
@@ -141,7 +145,7 @@ def plan():
         print("No solution found")
 
 
-max_count = MyValidStateSampler.get_max_count()
+max_count = MyValidStateSampler.get_count_max()
 print("maxcount:", max_count)
 
 if __name__ == '__main__':

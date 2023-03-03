@@ -1,4 +1,4 @@
-from APES_2D_train import *
+
 from mp2d.scripts.planning import *
 from copy import deepcopy
 import numpy as np
@@ -13,7 +13,7 @@ from mp2d.scripts.manipulator import *
 
 from mp2d.scripts.planning import Planning
 from mp2d.scripts.utilities import *
-
+""""
 pl_req_file_name = "/home/wangkaige/Project/apes/easy_pl_req_250_nodes.json"
 planning_requests = load_planning_req_dataset(pl_req_file_name)
 
@@ -52,38 +52,42 @@ OC = torch.tensor(OC)
 OC = OC.reshape([1, OC.shape[0], -1])
 # Gen_net = torch.load("/home/wangkaige/Project/apes/net.generator")
 Gen_net = gen_model
-W = Gen_net(OC, SV, GV)
-# print("WEIGHT", W)
-length_W = W.shape[1]
-W = torch.tensor(W)
-W = W.squeeze()
-# print(W)
-# W = td.Categorical(torch.log(W).squeeze().exp())
-# w = td.Categorical(log.w.squeeze().exp())
-# print("cat", cat)
-solution_list = []
-path_w_idx = torch.load('/home/wangkaige/Project/apes/fixed_path_new')
-# print(path_w_idx)
-mean = torch.load('/home/wangkaige/Project/apes/mean_new')
-# print(mean)
-W_all = torch.zeros(path_w_idx[-1])
-# print(W_all)
-for i in range(length_W):
-    # pl_env.visualize_path(req, path.solution_path)
-    point_num = path_w_idx[i + 1] - path_w_idx[i]
-    W_line = torch.ones(point_num) * W[i] / point_num
-    W_all[path_w_idx[i]: path_w_idx[i + 1]] = W_line
-
-W_sum = td.Categorical(torch.log(W_all).squeeze().exp())
-# print("mean_sum:", mean)
-# mean = torch.stack(mean).to(device)
-# print(mean.shape)
-cov = np.eye(2) * 0.1
-cov = torch.tensor(cov)
-# normal_dis = MultivariateNormal(mean, cov)  # Not sure about
-dist = td.Independent(MultivariateNormal(mean, cov), 0)  # Not sure about 1
-# print(dist)
-gmm_dist = torch.distributions.MixtureSameFamily(W_sum, dist)
-samples = gmm_dist.sample([2000])
+W = Gen_net(OC, SV, GV)"""
 
 
+def gmm_dist_generator(W):
+    # print("WEIGHT", W)
+    length_W = W.shape[1]
+    W = torch.tensor(W)
+    W = W.squeeze()
+    # print(W)
+    # W = td.Categorical(torch.log(W).squeeze().exp())
+    # w = td.Categorical(log.w.squeeze().exp())
+    # print("cat", cat)
+    solution_list = []
+    path_w_idx = torch.load('/home/wangkaige/Project/apes/fixed_path_new')
+    # print(path_w_idx)
+    mean = torch.load('/home/wangkaige/Project/apes/mean_new')
+    # print(mean)
+    W_all = torch.zeros(path_w_idx[-1])
+    # print(W_all)
+    for i in range(length_W):
+        # pl_env.visualize_path(req, path.solution_path)
+        point_num = path_w_idx[i + 1] - path_w_idx[i]
+        W_line = torch.ones(point_num) * W[i] / point_num
+        W_all[path_w_idx[i]: path_w_idx[i + 1]] = W_line
+
+    W_sum = td.Categorical(torch.log(W_all).squeeze().exp())
+    # print("mean_sum:", mean)
+    # mean = torch.stack(mean).to(device)
+    # print(mean.shape)
+    cov = np.eye(2) * 0.1
+    cov = torch.tensor(cov)
+    # normal_dis = MultivariateNormal(mean, cov)  # Not sure about
+    dist = td.Independent(MultivariateNormal(mean, cov), 0)  # Not sure about 1
+    # print(dist)
+    gmm_dist = torch.distributions.MixtureSameFamily(W_sum, dist)
+    return gmm_dist
+
+
+# samples = gmm_dist.sample([2000])

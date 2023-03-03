@@ -2,12 +2,14 @@ import os
 import random
 import time
 import numpy as np
+from path_gen import gmm_dist_generator
 import torch.distributions as dist
 import torch.nn.functional
 import torch.optim as optim
 from torch.optim import Adam
 from RRT_Connect_GMM import *
 from collections import deque
+from RRT_Connect_GMM import MyValidStateSampler
 from tensorboardX import SummaryWriter
 from torch.distributions import Dirichlet
 from mp2d.scripts.planning import Planning
@@ -79,16 +81,16 @@ if __name__ == '__main__':
             pr = pl.search(req)
             # VALUE_ESTIMATE = pr.checked_counts
             # VALUE_ESTIMATE = torch.tensor(VALUE_ESTIMATE)
-            VALUE_ESTIMATE = max_count
-            VALUE_ESTIMATE = torch.tensor(VALUE_ESTIMATE)
-            # print(VALUE_ESTIMATE)
-            print("total iterations:", VALUE_ESTIMATE)
             # print("Original shape:", VALUE_ESTIMATE.shape)
             W = gen_model(OC, SV, GV)
+            gmm_dist = gmm_dist_generator(W)
             W = torch.tensor(W)
             # print("distribution weight:", W)
             # print("Original shape:", W.shape)
+            VALUE_ESTIMATE = plan(pl_req)
+            VALUE_ESTIMATE = torch.tensor(VALUE_ESTIMATE)
             experience = ([OC, SV, GV, W, VALUE_ESTIMATE])
+            print("total iterations:", VALUE_ESTIMATE)
             replay_buffer.append(experience)
             print('Waiting for buffer size ... {}/{}'.format(len(replay_buffer), BATCH_MAX))
 
