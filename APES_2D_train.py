@@ -2,6 +2,8 @@ import os
 import random
 import time
 import numpy as np
+from matplotlib import pyplot as plt
+
 from path_gen import gmm_dist_generator
 import torch.distributions as dist
 import torch.nn.functional
@@ -30,8 +32,6 @@ LR = 1e-4
 LOG_ALPHA_MIN = -10.
 LOG_ALPHA_MAX = 20.
 cwd = os.getcwd()
-easy_path = "/home/wangkaige/Project/apes/easy_pl_req_250_nodes.json"
-dataset = load_planning_req_dataset(easy_path)
 dof = 2
 links = [0.5, 0.5]
 ma = manipulator(dof, links)
@@ -48,9 +48,9 @@ if __name__ == '__main__':
     data = np.array([])
     OC = np.array(np.shape(pl.get_occupancy_map(planning_requests[1])))
     device = torch.device("cpu")
-    gen_model = APESGeneratorNet().double().to(device)
+    gen_model = APESGeneratorNet().float().to(device)
     gen_model.eval()
-    critic_model = APESCriticNet().double().to(device)
+    critic_model = APESCriticNet().float().to(device)
     critic_model.eval()
     gen_model_optimizer: Adam = optim.Adam(gen_model.parameters(), lr=LR)
     critic_model_optimizer: Adam = optim.Adam(critic_model.parameters(), lr=LR)
@@ -58,6 +58,9 @@ if __name__ == '__main__':
     alpha_optim = optim.Adam([log_alpha], lr=LR)
     torch.autograd.set_detect_anomaly(True)
     writer = SummaryWriter("Loss_Function")
+    critic_losses = []
+    gen_losses = []
+    alpha_losses = []
     for p in range(5):
         for i in range(0, BUFFER_MAX):
             # ran_idx = torch.randint(low=0, high=4000, size=(1,))
@@ -74,7 +77,7 @@ if __name__ == '__main__':
             OC = torch.tensor(OC).to(device)
             SV = torch.tensor(SV).to(device)
             GV = torch.tensor(GV).to(device)
-            diri_dist = gen_model(OC, SV, GV)
+            diri_dist = Dirichlet(gen_model(OC, SV, GV))
             W = diri_dist.sample()
 
             # print("W", W, W.shape)
@@ -116,7 +119,7 @@ if __name__ == '__main__':
                 priori_pro = dist.Normal(mean, std)
                 # print("posterior:", priori_pro)
                 posterior_prob = priori_pro.log_prob(sampled_values[j])
-                # print("posterior_prob:", posterior_prob)
+                print("posterior_prob:", posterior_prob, posterior_prob.shape)
                 # print("test", priori_pro.log_prob(a).exp())
                 critic_loss = critic_loss + (-posterior_prob) / REPLAY_SAMPLE_SIZE
 
@@ -125,14 +128,13 @@ if __name__ == '__main__':
             critic_loss.backward(retain_graph=True)
             torch.nn.utils.clip_grad_norm_(critic_model.parameters(), 1.0)
             critic_model_optimizer.step()
+            writer.add_scalar('Critic Loss', critic_loss.item(), global_step=p * 5 + i)
 
             # Update generator
             gen_objective = 0
             for k in range(REPLAY_SAMPLE_SIZE):
                 sampled_coefficients, entropy = gen_model.rsample(sampled_oc[k], sampled_start_v[k], sampled_goal_v[k])
                 mean, std = critic_model(sampled_oc[k], sampled_start_v[k], sampled_goal_v[k], sampled_coefficients)
-
-                dir_dist = gen_model(sampled_oc[k], sampled_start_v[k], sampled_goal_v[k])
 
                 # print("entropy", entropy)
                 dual_terms = (log_alpha.exp().detach() * entropy)
@@ -145,6 +147,7 @@ if __name__ == '__main__':
             gen_objective.backward()
             torch.nn.utils.clip_grad_norm_(gen_model.parameters(), 1.0)
             gen_model_optimizer.step()
+            writer.add_scalar('Generator Objective', gen_objective.item(), global_step=p * 5 + i)
             print("gen_objective", gen_objective)
 
             # update loss
@@ -166,15 +169,9 @@ if __name__ == '__main__':
                 log_alpha.grad *= (((-log_alpha.grad >= 0) | (log_alpha >= LOG_ALPHA_MIN)) &
                                    ((-log_alpha.grad < 0) | (log_alpha <= LOG_ALPHA_MAX))).float()  # ppo
             alpha_optim.step()
+            writer.add_scalar('Alpha Loss', alpha_loss.item(), global_step=p * 5 + i)
 
-            # critic_loss = critic_loss.item()
-            gen_objective = gen_objective.item()
-            alpha_loss = alpha_loss.item()
-            # loss function visualable
-            # writer.add_scalar("CRITIC LOSS", critic_loss)
-            writer.add_scalar("GEN LOSS", gen_objective)
-            writer.add_scalar("ALPHA LOSS", alpha_loss)
-        writer.close()
+    writer.close()
 
 
 
